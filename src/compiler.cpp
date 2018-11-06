@@ -66,11 +66,25 @@ Function *addMainFunction()
   //call to CppClass::staticNoArgs()
   builder.CreateCall(findFunction("_ZN8CppClass12staticNoArgsEv"));
 
-  //call to ExtendedClass::staticNoArgs
+  //call to ExtendedClass::staticNoArgs()
   builder.CreateCall(findFunction("_ZN13ExtendedClass12staticNoArgsEv"));
 
+  //call to ExtendedClass::staticPrintMsg()
   callee=findFunction("_ZN13ExtendedClass14staticPrintMsgEPKc");
   builder.CreateCall(callee,args);
+
+
+  //call to CppClass::printMsg()
+  Value *baseInst=builder.CreateCall(findFunction("_ZN8CppClass11getInstanceEv"),None,"baseInst");
+  str=builder.CreateGlobalStringPtr("I'm calling CppClass::printMsg() on a CppClass instance!");
+  args=std::vector<Value*>{baseInst,str};
+  builder.CreateCall(findFunction("_ZN8CppClass8printMsgEPKc"),args);
+
+  //call to (inherited) ExtendedClass::printMsg()
+  Value *extInst=builder.CreateCall(findFunction("_ZN13ExtendedClass11getInstanceEv"),None,"extInst");
+  str=builder.CreateGlobalStringPtr("I'm calling CppClass::printMsg() on an ExtendedClass instance!");
+  args=std::vector<Value*>{extInst,str};
+  builder.CreateCall(findFunction("_ZN8CppClass8printMsgEPKc"),args);
 
 
   //end: return int 0
@@ -108,8 +122,16 @@ void addCppLibraryWrappers()
 
   ft=getVoidCharPtrFT();
   Function::Create(ft,Function::ExternalLinkage,"_ZN13ExtendedClass14staticPrintMsgEPKc",module);
-}
 
+  ft=FunctionType::get(PointerType::get(Type::getInt8Ty(*context),0),false);
+  Function::Create(ft,Function::ExternalLinkage,"_ZN8CppClass11getInstanceEv",module);
+  Function::Create(ft,Function::ExternalLinkage,"_ZN13ExtendedClass11getInstanceEv",module);
+
+  Type *ptr=PointerType::get(Type::getInt8Ty(*context),0);
+  std::vector<Type*> args(2,ptr);
+  ft=FunctionType::get(Type::getVoidTy(*context),args,false);
+  Function::Create(ft,Function::ExternalLinkage,"_ZN8CppClass8printMsgEPKc",module);
+}
 
 Module *createLLVMModule()
 {

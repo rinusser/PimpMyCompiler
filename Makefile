@@ -18,8 +18,8 @@ lib/libpmcc.so: src/libpmcc.c
 	gcc -c -Wall -Werror -fpic -o lib/libpmcc.o src/libpmcc.c
 	gcc -shared -o lib/libpmcc.so lib/libpmcc.o
 
-lib/libpmccpp.so: src/libpmccpp.c
-	g++ -c -Wall -Werror -fpic -o lib/libpmccpp.o src/libpmccpp.c
+lib/libpmccpp.so: src/libpmccpp.cpp
+	g++ -c -Wall -Werror -fpic -o lib/libpmccpp.o src/libpmccpp.cpp
 	g++ -shared -o lib/libpmccpp.so lib/libpmccpp.o
 
 clean:
