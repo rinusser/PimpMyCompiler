@@ -16,7 +16,7 @@ static const char *prefix="greetings from C!";
 
 void c_noargs()
 {
-  printf("%s noargs() says hi.\n",prefix);
+  printf("%s c_noargs() says hi.\n",prefix);
 }
 
 void c_printstr(const char *str)
