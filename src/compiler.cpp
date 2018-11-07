@@ -12,22 +12,14 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/IR/IRBuilder.h"
 
+#include "libllvmwrapper.h" //use wrapper lib here too to make sure it'll work from within generated code
+
+
 using namespace llvm;
 
 
-Module *createLLVMModule();
 LLVMContext *context;
 Module *module;
-
-
-int main(int argc, char **argv)
-{
-  module=createLLVMModule();
-  verifyModule(*module);
-  module->print(errs(),NULL);
-
-  return 0;
-}
 
 
 Function *findFunction(const char *name)
@@ -39,7 +31,7 @@ Function *findFunction(const char *name)
 }
 
 
-Function *addMainFunction()
+void addMainFunction()
 {
   IntegerType *int32=Type::getInt32Ty(*context);
 
@@ -48,51 +40,123 @@ Function *addMainFunction()
   func->setCallingConv(CallingConv::C);
 
   BasicBlock *block=BasicBlock::Create(*context,"entry",func);
-  IRBuilder<> builder(block);
+  IRBuilder<> *builder=llvmw_create_builder(block);
+
+  Function *callee=findFunction("test_calls");
+  builder->CreateCall(callee);
+
+  callee=findFunction("compiler_demo");
+  builder->CreateCall(callee);
+
+  builder->CreateRet(ConstantInt::get(Type::getInt32Ty(*context),0));
+
+  verifyFunction(*func);
+}
+
+
+void addCompilerDemo()
+{
+  Constant *c=module->getOrInsertFunction("compiler_demo",Type::getVoidTy(*context),NULL);
+  Function *func=cast<Function>(c);
+  func->setCallingConv(CallingConv::C);
+
+  BasicBlock *block=BasicBlock::Create(*context,"entry",func);
+  IRBuilder<> *builder=llvmw_create_builder(block);
+
+  //helper types/values
+  PointerType *type_i8ptr=PointerType::get(Type::getInt8Ty(*context),0);
+  Type *type_i1=Type::getInt1Ty(*context);
+  Type *type_void=Type::getVoidTy(*context);
+
+  FunctionType *ft_i8ptr=FunctionType::get(type_i8ptr,false);
+
+  Value *val_null=ConstantPointerNull::get(type_i8ptr);
+  Value *val_false=ConstantInt::getFalse(*context);
+
+
+  //register external llvmw_create_module()
+  Function::Create(ft_i8ptr,Function::ExternalLinkage,"llvmw_create_module",module);
+
+  //Module *module=llvmw_create_module()
+  Value *var_module=builder->CreateCall(findFunction("llvmw_create_module"),None,"module");
+
+  //LLVMContext *context=llvmw_get_module_context(module)
+
+  //verifyModule(*module,NULL,NULL);
+
+  //register errs()
+  Function::Create(ft_i8ptr,Function::ExternalLinkage,"_ZN4llvm4errsEv",module);
+
+  //stderr=errs()
+  Value *var_stderr=builder->CreateCall(findFunction("_ZN4llvm4errsEv"));
+
+  //register Module::print()
+  std::vector<Type*> args=std::vector<Type*>{type_i8ptr,type_i8ptr,type_i8ptr,type_i1,type_i1};
+  FunctionType *ft=FunctionType::get(type_void,args,false);
+  Function::Create(ft,Function::ExternalLinkage,"_ZNK4llvm6Module5printERNS_11raw_ostreamEPNS_24AssemblyAnnotationWriterEbb",module);
+
+  //module->print(errs(),NULL,false,false);
+  Function *callee=findFunction("_ZNK4llvm6Module5printERNS_11raw_ostreamEPNS_24AssemblyAnnotationWriterEbb");
+  std::vector<Value*> args2=std::vector<Value*>{var_module,var_stderr,val_null,val_false,val_false};
+  builder->CreateCall(callee,args2);
+
+
+  //end: return
+  builder->CreateRet(NULL);
+  verifyFunction(*func);
+}
+
+
+void addTestCallsFunction()
+{
+  Constant *c=module->getOrInsertFunction("test_calls",Type::getVoidTy(*context),NULL);
+  Function *func=cast<Function>(c);
+  func->setCallingConv(CallingConv::C);
+
+  BasicBlock *block=BasicBlock::Create(*context,"entry",func);
+  IRBuilder<> *builder=llvmw_create_builder(block);
 
 
   //XXX the findFunction() calls below don't do NULL checks for brevity's sake
 
   //call to c_noargs()
   Function *callee=findFunction("c_noargs");
-  builder.CreateCall(callee);
+  builder->CreateCall(callee);
 
   //call to c_printmsg()
   callee=findFunction("c_printstr");
-  Value *str=builder.CreateGlobalStringPtr("I'm a compiler!");
+  Value *str=builder->CreateGlobalStringPtr("I'm a compiler!");
   std::vector<Value*> args=std::vector<Value*>{str};
-  builder.CreateCall(callee,args);
+  builder->CreateCall(callee,args);
 
   //call to CppClass::staticNoArgs()
-  builder.CreateCall(findFunction("_ZN8CppClass12staticNoArgsEv"));
+  builder->CreateCall(findFunction("_ZN8CppClass12staticNoArgsEv"));
 
   //call to ExtendedClass::staticNoArgs()
-  builder.CreateCall(findFunction("_ZN13ExtendedClass12staticNoArgsEv"));
+  builder->CreateCall(findFunction("_ZN13ExtendedClass12staticNoArgsEv"));
 
   //call to ExtendedClass::staticPrintMsg()
   callee=findFunction("_ZN13ExtendedClass14staticPrintMsgEPKc");
-  builder.CreateCall(callee,args);
+  builder->CreateCall(callee,args);
 
 
   //call to CppClass::printMsg()
-  Value *baseInst=builder.CreateCall(findFunction("_ZN8CppClass11getInstanceEv"),None,"baseInst");
-  str=builder.CreateGlobalStringPtr("I'm calling CppClass::printMsg() on a CppClass instance!");
+  Value *baseInst=builder->CreateCall(findFunction("_ZN8CppClass11getInstanceEv"),None,"baseInst");
+  str=builder->CreateGlobalStringPtr("I'm calling CppClass::printMsg() on a CppClass instance!");
   args=std::vector<Value*>{baseInst,str};
-  builder.CreateCall(findFunction("_ZN8CppClass8printMsgEPKc"),args);
+  builder->CreateCall(findFunction("_ZN8CppClass8printMsgEPKc"),args);
 
   //call to (inherited) ExtendedClass::printMsg()
-  Value *extInst=builder.CreateCall(findFunction("_ZN13ExtendedClass11getInstanceEv"),None,"extInst");
-  str=builder.CreateGlobalStringPtr("I'm calling CppClass::printMsg() on an ExtendedClass instance!");
+  Value *extInst=builder->CreateCall(findFunction("_ZN13ExtendedClass11getInstanceEv"),None,"extInst");
+  str=builder->CreateGlobalStringPtr("I'm calling CppClass::printMsg() on an ExtendedClass instance!");
   args=std::vector<Value*>{extInst,str};
-  builder.CreateCall(findFunction("_ZN8CppClass8printMsgEPKc"),args);
+  builder->CreateCall(findFunction("_ZN8CppClass8printMsgEPKc"),args);
 
 
-  //end: return int 0
-  builder.CreateRet(ConstantInt::get(Type::getInt32Ty(*context),0));
+  //end: return
+  builder->CreateRet(NULL);
 
   verifyFunction(*func);
-
-  return func;
 }
 
 
@@ -133,13 +197,20 @@ void addCppLibraryWrappers()
   Function::Create(ft,Function::ExternalLinkage,"_ZN8CppClass8printMsgEPKc",module);
 }
 
-Module *createLLVMModule()
+
+int main(int argc, char **argv)
 {
-  context=new LLVMContext();
-  module=new Module("generated",*context);
+  module=llvmw_create_module();
+  context=llvmw_get_module_context(module);
+
   addCLibraryWrappers();
   addCppLibraryWrappers();
+  addTestCallsFunction();
+  addCompilerDemo();
   addMainFunction();
 
-  return module;
+  verifyModule(*module);
+  module->print(errs(),NULL);
+
+  return 0;
 }
