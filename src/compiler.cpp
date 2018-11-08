@@ -1,5 +1,7 @@
 /** \file
  * A simple LLVM-based compiler / code generator.
+ * This file isn't used anymore, it'll probably be deleted. The (otherwise better) LLVM C++ API turned out to be too much hassle
+ * to use, the C API is much easier. See stage1.c for the new code generator.
  *
  * \author Richard Nusser
  * \copyright 2018 Richard Nusser

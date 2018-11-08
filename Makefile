@@ -1,3 +1,4 @@
+LLVMCFLAGS := $(shell llvm-config-4.0 --cflags)
 LLVMFLAGS := $(shell llvm-config-4.0 --cxxflags --ldflags --libs core)
 
 $(shell mkdir -p bin lib llvm)
@@ -5,17 +6,18 @@ $(shell mkdir -p bin lib llvm)
 all: run
 
 
-run: llvm/generated.bc
-	llvm-link-4.0 llvm/generated.bc -o - | LD_PRELOAD="$(PWD)/lib/libpmcc.so $(PWD)/lib/libpmccpp.so $(PWD)/lib/libllvmwrapper.so" lli-4.0
+run: llvm/stage2.bc
+	llvm-link-4.0 llvm/stage2.bc -o - | lli-4.0
 
-llvm/generated.bc: bin/compiler
-	LD_LIBRARY_PATH=$(PWD)/lib bin/compiler 2>&1 | llvm-as-4.0 -o llvm/generated.bc
+llvm/stage2.bc: bin/stage1
+	LD_LIBRARY_PATH=$(PWD)/lib bin/stage1 2>&1 | llvm-as-4.0 -o llvm/stage2.bc
 
-assembly: bin/compiler
-	LD_LIBRARY_PATH=$(PWD)/lib bin/compiler
+ir: bin/stage1
+	LD_LIBRARY_PATH=$(PWD)/lib bin/stage1
 
-bin/compiler: src/compiler.cpp libraries
-	g++ -g src/compiler.cpp $(LLVMFLAGS) -lllvmwrapper -L$(PWD)/lib/ -o bin/compiler
+bin/stage1: src/stage1.c
+	gcc -c -g $(LLVMCFLAGS) -o bin/stage1.o src/stage1.c
+	g++ -g $(LLVMFLAGS) -o bin/stage1 bin/stage1.o
 
 libraries: lib/libpmcc.so lib/libpmccpp.so lib/libllvmwrapper.so
 
