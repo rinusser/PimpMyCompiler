@@ -20,7 +20,7 @@
 using namespace llvm;
 
 
-LLVMContext *context;
+//LLVMContext *context;
 Module *module;
 
 
@@ -35,22 +35,24 @@ Function *findFunction(const char *name)
 
 void addMainFunction()
 {
-  IntegerType *int32=Type::getInt32Ty(*context);
+  LLVMContext &context=module->getContext();
+  IntegerType *int32=Type::getInt32Ty(context);
 
   Constant *c=module->getOrInsertFunction("main",int32,NULL);
   Function *func=cast<Function>(c);
   func->setCallingConv(CallingConv::C);
 
-  BasicBlock *block=BasicBlock::Create(*context,"entry",func);
+  BasicBlock *block=BasicBlock::Create(context,"entry",func);
   IRBuilder<> *builder=llvmw_create_builder(block);
 
-  Function *callee=findFunction("test_calls");
-  builder->CreateCall(callee);
+  Function *callee;
+//  Function *callee=findFunction("test_calls");
+//  builder->CreateCall(callee);
 
   callee=findFunction("compiler_demo");
   builder->CreateCall(callee);
 
-  builder->CreateRet(ConstantInt::get(Type::getInt32Ty(*context),0));
+  builder->CreateRet(ConstantInt::get(Type::getInt32Ty(context),0));
 
   verifyFunction(*func);
 }
@@ -58,22 +60,32 @@ void addMainFunction()
 
 void addCompilerDemo()
 {
-  Constant *c=module->getOrInsertFunction("compiler_demo",Type::getVoidTy(*context),NULL);
+  LLVMContext &context=module->getContext();
+  Constant *c=module->getOrInsertFunction("compiler_demo",Type::getVoidTy(context),NULL);
   Function *func=cast<Function>(c);
   func->setCallingConv(CallingConv::C);
 
-  BasicBlock *block=BasicBlock::Create(*context,"entry",func);
+  BasicBlock *block=BasicBlock::Create(context,"entry",func);
   IRBuilder<> *builder=llvmw_create_builder(block);
 
   //helper types/values
-  PointerType *type_i8ptr=PointerType::get(Type::getInt8Ty(*context),0);
-  Type *type_i1=Type::getInt1Ty(*context);
-  Type *type_void=Type::getVoidTy(*context);
+  PointerType *type_i8ptr=PointerType::get(Type::getInt8Ty(context),0);
+
+
+  Type *type_void=Type::getVoidTy(context);
+  Type *type_i1=Type::getInt1Ty(context);
+  Type *type_i32=Type::getInt32Ty(context);
 
   FunctionType *ft_i8ptr=FunctionType::get(type_i8ptr,false);
+  std::vector<Type*> args_types=std::vector<Type*>{type_i8ptr};
+  FunctionType *ft_i8ptr_i8ptr=FunctionType::get(type_i8ptr,args_types,false);
+  FunctionType *ft_i8ptrptr_i8ptr=FunctionType::get(PointerType::get(type_i8ptr,0),args_types,false);
+  args_types=std::vector<Type*>{type_i8ptr,type_i1};
+  FunctionType *ft_i8ptr_i8ptr_i1=FunctionType::get(type_i8ptr,args_types,false);
 
   Value *val_null=ConstantPointerNull::get(type_i8ptr);
-  Value *val_false=ConstantInt::getFalse(*context);
+  Value *val_false=ConstantInt::getFalse(context);
+  Value *val_i32_0=ConstantInt::get(type_i32,0);
 
 
   //register external llvmw_create_module()
@@ -82,7 +94,28 @@ void addCompilerDemo()
   //Module *module=llvmw_create_module()
   Value *var_module=builder->CreateCall(findFunction("llvmw_create_module"),None,"module");
 
-  //LLVMContext *context=llvmw_get_module_context(module)
+  //LLVMContext *contextptr=llvmw_get_module_context(module)
+  Function::Create(ft_i8ptr_i8ptr,Function::ExternalLinkage,"llvmw_get_module_context",module);
+  std::vector<Value*> args_values=std::vector<Value*>{var_module};
+  Value *var_context=builder->CreateCall(findFunction("llvmw_get_module_context"),args_values,"context");
+
+  //get int32 type
+  Function::Create(ft_i8ptr_i8ptr,Function::ExternalLinkage,"_ZN4llvm4Type10getInt32TyERNS_11LLVMContextE",module);
+  args_values=std::vector<Value*>{var_context};
+  Value *var_i32=builder->CreateCall(findFunction("_ZN4llvm4Type10getInt32TyERNS_11LLVMContextE"),args_values,"i32");
+
+  //get function type for int(void)
+  Function::Create(ft_i8ptr_i8ptr_i1,Function::ExternalLinkage,"_ZN4llvm12FunctionType3getEPNS_4TypeEb",module);
+  args_values=std::vector<Value*>{var_i32,val_false};
+  Value *var_ft_i32_void=builder->CreateCall(findFunction("_ZN4llvm12FunctionType3getEPNS_4TypeEb"),args_values,"ft_i32_void");
+
+  //register external dummy method
+  args_types=std::vector<Type*>{type_i8ptr,type_i32,type_i8ptr,type_i8ptr};
+  FunctionType *ft_i8ptr_i8ptr_i32_i8ptr_i8ptr=FunctionType::get(type_i8ptr,args_types,false);
+  Function::Create(ft_i8ptr_i8ptr_i32_i8ptr_i8ptr,Function::ExternalLinkage,"llvmw_create_function",module);
+  Value *val_funcname=builder->CreateGlobalStringPtr("dummy");
+  args_values=std::vector<Value*>{var_ft_i32_void,val_i32_0,val_funcname,var_module};
+  builder->CreateCall(findFunction("llvmw_create_function"),args_values);
 
   //verifyModule(*module,NULL,NULL);
 
@@ -108,7 +141,7 @@ void addCompilerDemo()
   verifyFunction(*func);
 }
 
-
+/*
 void addTestCallsFunction()
 {
   Constant *c=module->getOrInsertFunction("test_calls",Type::getVoidTy(*context),NULL);
@@ -160,15 +193,16 @@ void addTestCallsFunction()
 
   verifyFunction(*func);
 }
-
+*/
 
 FunctionType *getVoidCharPtrFT()
 {
-  std::vector<Type*> args(1,PointerType::get(Type::getInt8Ty(*context),0));
-  return FunctionType::get(Type::getVoidTy(*context),args,false);
+  LLVMContext &context=module->getContext();
+  std::vector<Type*> args(1,PointerType::get(Type::getInt8Ty(context),0));
+  return FunctionType::get(Type::getVoidTy(context),args,false);
 }
 
-
+/*
 void addCLibraryWrappers()
 {
   FunctionType *ft=FunctionType::get(Type::getVoidTy(*context),false);
@@ -198,16 +232,16 @@ void addCppLibraryWrappers()
   ft=FunctionType::get(Type::getVoidTy(*context),args,false);
   Function::Create(ft,Function::ExternalLinkage,"_ZN8CppClass8printMsgEPKc",module);
 }
-
+*/
 
 int main(int argc, char **argv)
 {
   module=llvmw_create_module();
-  context=llvmw_get_module_context(module);
+//  context=llvmw_get_module_context(module);
 
-  addCLibraryWrappers();
-  addCppLibraryWrappers();
-  addTestCallsFunction();
+//  addCLibraryWrappers();
+//  addCppLibraryWrappers();
+//  addTestCallsFunction();
   addCompilerDemo();
   addMainFunction();
 

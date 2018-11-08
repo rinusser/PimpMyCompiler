@@ -20,6 +20,7 @@ extern "C" {
 Module *llvmw_create_module();
 LLVMContext *llvmw_get_module_context(Module *module);
 IRBuilder<> *llvmw_create_builder(BasicBlock *block);
+Function *llvmw_create_function(FunctionType *ft, GlobalValue::LinkageTypes linkage, const char *name, Module *module);
 
 
 } //extern "C"

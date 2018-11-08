@@ -6,8 +6,18 @@ $(shell mkdir -p bin lib llvm)
 all: run
 
 
-run: llvm/stage2.bc
-	llvm-link-4.0 llvm/stage2.bc -o - | lli-4.0
+run: llvm/stage3.bc lib/libpmcc.so
+	llvm-link-4.0 llvm/stage3.bc -o - | LD_PRELOAD="$(PWD)/lib/libpmcc.so" lli-4.0
+
+bin/stage3: llvm/stage3.bc lib/libpmcc.so
+	llc-4.0 -relocation-model=pic -filetype=obj -o llvm/stage3.o llvm/stage3.bc
+	g++ $(LLVMFLAGS) -L$(PWD)/lib -lpmcc -o bin/stage3 llvm/stage3.o
+
+llvm/stage3.bc: bin/stage2
+	LD_LIBRARY_PATH=$(PWD)/lib bin/stage2 2>&1 | llvm-as-4.0 -o llvm/stage3.bc
+
+ir2: bin/stage2
+	LD_LIBRARY_PATH=$(PWD)/lib bin/stage2
 
 llvm/stage2.bc: bin/stage1
 	LD_LIBRARY_PATH=$(PWD)/lib bin/stage1 2>&1 | llvm-as-4.0 -o llvm/stage2.bc
@@ -19,7 +29,12 @@ bin/stage1: src/stage1.c
 	gcc -c -g $(LLVMCFLAGS) -o bin/stage1.o src/stage1.c
 	g++ -g $(LLVMFLAGS) -o bin/stage1 bin/stage1.o
 
-libraries: lib/libpmcc.so lib/libpmccpp.so lib/libllvmwrapper.so
+bin/stage2: llvm/stage2.bc
+	llc-4.0 -relocation-model=pic -filetype=obj -o llvm/stage2.o llvm/stage2.bc
+	g++ $(LLVMFLAGS) -o bin/stage2 llvm/stage2.o
+
+stage1cpp: src/compiler.cpp lib/libpmcc.so lib/libpmccpp.so lib/libllvmwrapper.so
+	g++ -g src/compiler.cpp $(LLVMFLAGS) -lllvmwrapper -L$(PWD)/lib/ -o bin/stage1
 
 lib/libpmcc.so: src/libpmcc.c
 	gcc -c -Wall -Werror -fpic -o lib/libpmcc.o src/libpmcc.c
