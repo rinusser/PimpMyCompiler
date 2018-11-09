@@ -1,5 +1,5 @@
 /** \file
- * A simple LLVM-based compiler / code generator using the LLVM's C API.
+ * A simple LLVM-based compiler / code generator using LLVM's C API.
  *
  * TODO: the C calling convention is default, but maybe set it explicitly anyways
  *
