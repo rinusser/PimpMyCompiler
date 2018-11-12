@@ -39,13 +39,110 @@ void addMainFunction()
   LLVMBuilderRef builder=LLVMCreateBuilder();
   LLVMPositionBuilderAtEnd(builder,block);
 
-  LLVMValueRef callee=findFunction("compiler_demo");
-  LLVMBuildCall(builder,callee,NULL,0,"");
+  LLVMBuildCall(builder,findFunction("compiler_demo"),NULL,0,"");
+  LLVMBuildCall(builder,findFunction("read_source_demo"),NULL,0,"");
 
   LLVMValueRef int32_0=LLVMConstInt(int32,0,false);
   LLVMBuildRet(builder,int32_0);
+}
 
-  LLVMVerifyFunction(func,LLVMPrintMessageAction);
+
+void addReadSourceDemo() //run "make sourcedemo" to see this function's results
+{
+  LLVMTypeRef void_type=LLVMVoidType();
+  LLVMTypeRef ft_void=LLVMFunctionType(void_type,NULL,0,false);
+
+  LLVMTypeRef i8_type=LLVMInt8Type();
+  LLVMTypeRef i8ptr_type=LLVMPointerType(i8_type,0);
+  LLVMTypeRef i32_type=LLVMInt32Type();
+  LLVMValueRef i32_0=LLVMConstInt(i32_type,0,false);
+  LLVMValueRef i32_1=LLVMConstInt(i32_type,1,false);
+
+  LLVMValueRef char_i=LLVMConstInt(i8_type,'i',false);
+  LLVMValueRef char_p=LLVMConstInt(i8_type,'p',false);
+  LLVMValueRef char_q=LLVMConstInt(i8_type,'q',false);
+  LLVMValueRef char_pipe=LLVMConstInt(i8_type,'|',false);
+
+  LLVMTypeRef ft_void_i8ptr=LLVMFunctionType(void_type,&i8ptr_type,1,false);
+
+
+  LLVMValueRef func=LLVMAddFunction(module,"read_source_demo",ft_void);
+  LLVMBasicBlockRef entry=LLVMAppendBasicBlock(func,"entry");
+  LLVMBasicBlockRef instr_parser=LLVMAppendBasicBlock(func,"instr_parser");
+  LLVMBasicBlockRef instr_advance_1=LLVMAppendBasicBlock(func,"instr_advance_1");
+  LLVMBasicBlockRef instr_advance_block=LLVMAppendBasicBlock(func,"instr_advancer");
+  LLVMBasicBlockRef ignore_instr_block=LLVMAppendBasicBlock(func,"ignore_instr");
+  LLVMBasicBlockRef print_instr_block=LLVMAppendBasicBlock(func,"print_instr");
+  LLVMBasicBlockRef quit_instr_block=LLVMAppendBasicBlock(func,"quit_instr");
+  LLVMBasicBlockRef err_block=LLVMAppendBasicBlock(func,"err_block");
+  LLVMBasicBlockRef end_block=LLVMAppendBasicBlock(func,"end_block");
+
+  LLVMBuilderRef builder=LLVMCreateBuilder();
+
+  LLVMPositionBuilderAtEnd(builder,entry);
+
+  //declare reference to char *source_code and retrieve it
+  LLVMValueRef source_code_ref=LLVMAddGlobal(module,i8ptr_type,"source_code");
+  LLVMValueRef source_code_value=LLVMBuildLoad(builder,source_code_ref,"source_code_value");
+
+  LLVMValueRef start=LLVMBuildGEP(builder,source_code_value,&i32_0,1,"start");
+  LLVMValueRef cur=LLVMBuildAlloca(builder,i8ptr_type,"cur");
+  LLVMBuildStore(builder,start,cur);
+  LLVMBuildBr(builder,instr_parser);
+
+  //instruction parser
+  LLVMPositionBuilderAtEnd(builder,instr_parser);
+  LLVMValueRef instr_pos=LLVMBuildLoad(builder,cur,"instr_pos");
+  LLVMValueRef instruction=LLVMBuildLoad(builder,instr_pos,"instruction");
+  LLVMValueRef sw=LLVMBuildSwitch(builder,instruction,err_block,3);
+  LLVMAddCase(sw,char_p,print_instr_block);
+  LLVMAddCase(sw,char_i,ignore_instr_block);
+  LLVMAddCase(sw,char_q,quit_instr_block);
+
+  //instruction pointer advancement after instruction call
+  LLVMPositionBuilderAtEnd(builder,instr_advance_block);
+  LLVMValueRef pos=LLVMBuildLoad(builder,cur,"pos");
+  LLVMValueRef next=LLVMBuildGEP(builder,pos,&i32_1,1,"next");
+  LLVMBuildStore(builder,next,cur);
+  LLVMValueRef ch=LLVMBuildLoad(builder,next,"ch");
+  LLVMValueRef switch_char=LLVMBuildSwitch(builder,ch,instr_advance_block,1);
+  LLVMAddCase(switch_char,char_pipe,instr_advance_1);
+
+  //advance instruction pointer by 1 (to skip found "|" delimiter before handling next instruction)
+  LLVMPositionBuilderAtEnd(builder,instr_advance_1);
+  LLVMValueRef orig=LLVMBuildLoad(builder,cur,"orig");
+  LLVMValueRef inc=LLVMBuildGEP(builder,orig,&i32_1,1,"inc");
+  LLVMBuildStore(builder,inc,cur);
+  LLVMBuildBr(builder,instr_parser);
+
+  //"ignore" instruction handler
+  LLVMPositionBuilderAtEnd(builder,ignore_instr_block);
+  LLVMValueRef ignore_func=LLVMAddFunction(module,"print_ignore",ft_void);
+  LLVMBuildCall(builder,ignore_func,NULL,0,"");
+  LLVMBuildBr(builder,instr_advance_block);
+
+  //"print" instruction handler
+  LLVMPositionBuilderAtEnd(builder,print_instr_block);
+  LLVMValueRef msg=LLVMBuildGEP(builder,instr_pos,&i32_1,1,"msg");
+  LLVMValueRef printer_func=LLVMAddFunction(module,"printer",ft_void_i8ptr);
+  LLVMBuildCall(builder,printer_func,&msg,1,"");
+  LLVMBuildBr(builder,instr_advance_block);
+
+  //"quit" instruction handler
+  LLVMPositionBuilderAtEnd(builder,quit_instr_block);
+  LLVMValueRef quit_func=LLVMAddFunction(module,"print_quit",ft_void);
+  LLVMBuildCall(builder,quit_func,NULL,0,"");
+  LLVMBuildBr(builder,end_block);
+
+  //error handler
+  LLVMPositionBuilderAtEnd(builder,err_block);
+  LLVMValueRef print_instruction_error_func=LLVMAddFunction(module,"print_instruction_error",ft_void_i8ptr);
+  LLVMBuildCall(builder,print_instruction_error_func,&instr_pos,1,"");
+  LLVMBuildBr(builder,end_block);
+
+  //function end
+  LLVMPositionBuilderAtEnd(builder,end_block);
+  LLVMBuildRetVoid(builder);
 }
 
 
@@ -200,7 +297,6 @@ void addCompilerDemo()
   //finish stage1 function
 
   LLVMBuildRetVoid(builder);
-  LLVMVerifyFunction(func,LLVMPrintMessageAction);
 }
 
 
@@ -210,10 +306,12 @@ int main(int argc, char **argv)
   context=LLVMGetModuleContext(module);
 
   addCompilerDemo();
+  addReadSourceDemo();
   addMainFunction();
 
-  LLVMVerifyModule(module,LLVMPrintMessageAction,NULL);
   printf("%s",LLVMPrintModuleToString(module));
+  if(LLVMVerifyModule(module,LLVMPrintMessageAction,NULL))
+    printf("\n");
 
   return 0;
 }

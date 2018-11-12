@@ -52,7 +52,8 @@ So far:
   (difficult to reproduce) instantiating objects directly.
 * the LLVM C API seems to work just as well so far, is easier to use and results in easier to read stage 1 code (compare
   src/stage1.c with the old src/compiler.cpp if you want, you'll see)
-* the LLVM C API documentation is lacking in a few places, maybe reading the C++ API equivalents will help
+* the LLVM C API documentation is lacking in a few places, maybe reading the C++ API equivalents will help.
+  It's often easier to `grep` the header files for keywords than to browse the documentation.
 
 
 # Requirements

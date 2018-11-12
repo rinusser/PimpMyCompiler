@@ -24,6 +24,11 @@ void c_printstr(const char *str)
   printf("%s c_printstr() caller says '%s'\n",prefix,str);
 }
 
+void c_printerr(const char *str)
+{
+  fprintf(stderr,"%s c_printerr() caller says '%s'\n",prefix,str);
+}
+
 int c_print_and_inc_int(const int value)
 {
   printf("%s c_print_and_inc_int() got '%d' and returns %d\n",prefix,value,value+1);
