@@ -15,9 +15,73 @@
 #include "llvm-c/Analysis.h"
 
 
+//stage 1 LLVM basics
 LLVMModuleRef module;
 LLVMContextRef context;
+LLVMBuilderRef builder;
 LLVMBool false=0;
+
+
+//stage 1 data types
+LLVMTypeRef void_type;
+LLVMTypeRef i1_type;
+LLVMTypeRef i8_type;
+LLVMTypeRef i32_type;
+LLVMTypeRef i8ptr_type;
+//LLVMTypeRef i8ptrptr_type=LLVMPointerType(i8ptr_type,0);
+
+
+//stage 1 function types
+LLVMTypeRef ft_i32;
+LLVMTypeRef ft_void;
+LLVMTypeRef ft_i8ptr;
+LLVMTypeRef ft_i8ptr_i8ptr;
+LLVMTypeRef ft_void_i8ptr;
+
+
+//stage 1 constants
+LLVMValueRef i32_0;
+LLVMValueRef i32_1;
+LLVMValueRef i8_i;
+LLVMValueRef i8_p;
+LLVMValueRef i8_q;
+LLVMValueRef i8_pipe;
+LLVMValueRef i8ptr_null;
+LLVMValueRef i1_false;
+
+
+
+void prepareStage1Globals(void)
+{
+  //LLVM basics
+  module=LLVMModuleCreateWithName("stage2");
+  context=LLVMGetModuleContext(module);
+  builder=LLVMCreateBuilder();
+
+  //simple data types
+  void_type=LLVMVoidType();
+  i1_type=LLVMInt1Type();
+  i8_type=LLVMInt8Type();
+  i32_type=LLVMInt32Type();
+  i8ptr_type=LLVMPointerType(i8_type,0);
+
+  //function types
+  ft_i32=LLVMFunctionType(i32_type,NULL,0,false);
+  ft_void=LLVMFunctionType(void_type,NULL,0,false);
+  ft_i8ptr=LLVMFunctionType(i8ptr_type,NULL,0,false);
+  ft_i8ptr_i8ptr=LLVMFunctionType(i8ptr_type,&i8ptr_type,1,false);
+  ft_void_i8ptr=LLVMFunctionType(void_type,&i8ptr_type,1,false);
+
+  //constants
+  i32_0=LLVMConstInt(i32_type,0,false);
+  i32_1=LLVMConstInt(i32_type,1,false);
+  i8_i=LLVMConstInt(i8_type,'i',false);
+  i8_p=LLVMConstInt(i8_type,'p',false);
+  i8_q=LLVMConstInt(i8_type,'q',false);
+  i8_pipe=LLVMConstInt(i8_type,'|',false);
+  i8ptr_null=LLVMConstNull(i8ptr_type);
+  i1_false=LLVMConstInt(i1_type,0,false);
+}
 
 
 LLVMValueRef findFunction(const char *name)
@@ -31,43 +95,19 @@ LLVMValueRef findFunction(const char *name)
 
 void addMainFunction()
 {
-  LLVMTypeRef int32=LLVMInt32Type();
-  LLVMTypeRef ft=LLVMFunctionType(int32,NULL,0,false);
-  LLVMValueRef func=LLVMAddFunction(module,"main",ft);
+  LLVMValueRef func=LLVMAddFunction(module,"main",ft_i32);
 
   LLVMBasicBlockRef block=LLVMAppendBasicBlock(func,"entry");
-  LLVMBuilderRef builder=LLVMCreateBuilder();
   LLVMPositionBuilderAtEnd(builder,block);
 
-  LLVMBuildCall(builder,findFunction("compiler_demo"),NULL,0,"");
-  LLVMBuildCall(builder,findFunction("read_source_demo"),NULL,0,"");
+  LLVMBuildCall(builder,findFunction("compile"),NULL,0,"");
 
-  LLVMValueRef int32_0=LLVMConstInt(int32,0,false);
-  LLVMBuildRet(builder,int32_0);
+  LLVMBuildRet(builder,i32_0);
 }
 
 
-void addReadSourceDemo() //run "make sourcedemo" to see this function's results
+void addSourceHandlerFragment(LLVMValueRef func, LLVMBasicBlockRef end_block)
 {
-  LLVMTypeRef void_type=LLVMVoidType();
-  LLVMTypeRef ft_void=LLVMFunctionType(void_type,NULL,0,false);
-
-  LLVMTypeRef i8_type=LLVMInt8Type();
-  LLVMTypeRef i8ptr_type=LLVMPointerType(i8_type,0);
-  LLVMTypeRef i32_type=LLVMInt32Type();
-  LLVMValueRef i32_0=LLVMConstInt(i32_type,0,false);
-  LLVMValueRef i32_1=LLVMConstInt(i32_type,1,false);
-
-  LLVMValueRef char_i=LLVMConstInt(i8_type,'i',false);
-  LLVMValueRef char_p=LLVMConstInt(i8_type,'p',false);
-  LLVMValueRef char_q=LLVMConstInt(i8_type,'q',false);
-  LLVMValueRef char_pipe=LLVMConstInt(i8_type,'|',false);
-
-  LLVMTypeRef ft_void_i8ptr=LLVMFunctionType(void_type,&i8ptr_type,1,false);
-
-
-  LLVMValueRef func=LLVMAddFunction(module,"read_source_demo",ft_void);
-  LLVMBasicBlockRef entry=LLVMAppendBasicBlock(func,"entry");
   LLVMBasicBlockRef instr_parser=LLVMAppendBasicBlock(func,"instr_parser");
   LLVMBasicBlockRef instr_advance_1=LLVMAppendBasicBlock(func,"instr_advance_1");
   LLVMBasicBlockRef instr_advance_block=LLVMAppendBasicBlock(func,"instr_advancer");
@@ -75,11 +115,6 @@ void addReadSourceDemo() //run "make sourcedemo" to see this function's results
   LLVMBasicBlockRef print_instr_block=LLVMAppendBasicBlock(func,"print_instr");
   LLVMBasicBlockRef quit_instr_block=LLVMAppendBasicBlock(func,"quit_instr");
   LLVMBasicBlockRef err_block=LLVMAppendBasicBlock(func,"err_block");
-  LLVMBasicBlockRef end_block=LLVMAppendBasicBlock(func,"end_block");
-
-  LLVMBuilderRef builder=LLVMCreateBuilder();
-
-  LLVMPositionBuilderAtEnd(builder,entry);
 
   //declare reference to char *source_code and retrieve it
   LLVMValueRef source_code_ref=LLVMAddGlobal(module,i8ptr_type,"source_code");
@@ -95,9 +130,9 @@ void addReadSourceDemo() //run "make sourcedemo" to see this function's results
   LLVMValueRef instr_pos=LLVMBuildLoad(builder,cur,"instr_pos");
   LLVMValueRef instruction=LLVMBuildLoad(builder,instr_pos,"instruction");
   LLVMValueRef sw=LLVMBuildSwitch(builder,instruction,err_block,3);
-  LLVMAddCase(sw,char_p,print_instr_block);
-  LLVMAddCase(sw,char_i,ignore_instr_block);
-  LLVMAddCase(sw,char_q,quit_instr_block);
+  LLVMAddCase(sw,i8_p,print_instr_block);
+  LLVMAddCase(sw,i8_i,ignore_instr_block);
+  LLVMAddCase(sw,i8_q,quit_instr_block);
 
   //instruction pointer advancement after instruction call
   LLVMPositionBuilderAtEnd(builder,instr_advance_block);
@@ -106,7 +141,7 @@ void addReadSourceDemo() //run "make sourcedemo" to see this function's results
   LLVMBuildStore(builder,next,cur);
   LLVMValueRef ch=LLVMBuildLoad(builder,next,"ch");
   LLVMValueRef switch_char=LLVMBuildSwitch(builder,ch,instr_advance_block,1);
-  LLVMAddCase(switch_char,char_pipe,instr_advance_1);
+  LLVMAddCase(switch_char,i8_pipe,instr_advance_1);
 
   //advance instruction pointer by 1 (to skip found "|" delimiter before handling next instruction)
   LLVMPositionBuilderAtEnd(builder,instr_advance_1);
@@ -139,36 +174,11 @@ void addReadSourceDemo() //run "make sourcedemo" to see this function's results
   LLVMValueRef print_instruction_error_func=LLVMAddFunction(module,"print_instruction_error",ft_void_i8ptr);
   LLVMBuildCall(builder,print_instruction_error_func,&instr_pos,1,"");
   LLVMBuildBr(builder,end_block);
-
-  //function end
-  LLVMPositionBuilderAtEnd(builder,end_block);
-  LLVMBuildRetVoid(builder);
 }
 
 
-void addCompilerDemo()
+void addCompileFunction()
 {
-  //stage1 data types
-  LLVMTypeRef void_type=LLVMVoidType();
-  LLVMTypeRef i1_type=LLVMInt1Type();
-  LLVMTypeRef i8_type=LLVMInt8Type();
-  LLVMTypeRef i32_type=LLVMInt32Type();
-  LLVMTypeRef i8ptr_type=LLVMPointerType(i8_type,0);
-//  LLVMTypeRef i8ptrptr_type=LLVMPointerType(i8ptr_type,0);
-
-  //stage1 constants
-  LLVMValueRef i32_0_val=LLVMConstInt(i32_type,0,false);
-//  LLVMValueRef i32_5_val=LLVMConstInt(i32_type,5,false);
-  LLVMValueRef false_val=LLVMConstInt(i1_type,0,false);
-  LLVMValueRef null_val=LLVMConstNull(i8ptr_type);
-
-  //stage1 function types
-  LLVMTypeRef ft_void=LLVMFunctionType(void_type,NULL,0,false);
-  LLVMTypeRef ft_i8ptr=LLVMFunctionType(i8ptr_type,NULL,0,false);
-  LLVMTypeRef ft_i8ptr_i8ptr=LLVMFunctionType(i8ptr_type,&i8ptr_type,1,false);
-  LLVMTypeRef ft_void_i8ptr=LLVMFunctionType(void_type,&i8ptr_type,1,false);
-
-
   LLVMTypeRef types[]={i8ptr_type,i32_type,i8ptr_type};
   LLVMTypeRef ft_void_i8ptr_i32_i8ptr=LLVMFunctionType(void_type,types,3,false);
 
@@ -195,10 +205,9 @@ void addCompilerDemo()
   LLVMTypeRef ft_i8ptr_i8ptr_i8ptr_i8ptr_i32_i8ptr=LLVMFunctionType(i8ptr_type,types8,5,false);
 
   //stage1 entry
-  LLVMValueRef func=LLVMAddFunction(module,"compiler_demo",ft_void);
+  LLVMValueRef func=LLVMAddFunction(module,"compile",ft_void);
 
   LLVMBasicBlockRef block=LLVMAppendBasicBlock(func,"entry");
-  LLVMBuilderRef builder=LLVMCreateBuilder();
   LLVMPositionBuilderAtEnd(builder,block);
 
 
@@ -223,7 +232,7 @@ void addCompilerDemo()
   callee=LLVMAddFunction(module,"LLVMInt32Type",ft_i8ptr);
   LLVMValueRef stage2_i32_type=LLVMBuildCall(builder,callee,NULL,0,"stage2_i32_type");
   callee=LLVMAddFunction(module,"LLVMPointerType",ft_i8ptr_i8ptr_i32);
-  LLVMValueRef args4[]={stage2_i8_type,i32_0_val};
+  LLVMValueRef args4[]={stage2_i8_type,i32_0};
   LLVMValueRef stage2_i8ptr_type=LLVMBuildCall(builder,callee,args4,2,"stage2_i8ptr_type");
 //  args4[0]=stage2_i8ptr_type;
 //  LLVMValueRef stage2_i8ptrptr_type=LLVMBuildCall(builder,callee,args4,2,"stage2_i8ptrptr_type");
@@ -234,14 +243,14 @@ void addCompilerDemo()
 //  LLVMValueRef stage2_nullp_val=LLVMBuildCall(builder,callee,&stage2_i8ptrptr_type,1,"stage2_nullp_val");
 
   callee=LLVMAddFunction(module,"LLVMConstInt",ft_i8ptr_i8ptr_i32_i1);
-  LLVMValueRef args3[]={stage2_i32_type,i32_0_val,false_val};
+  LLVMValueRef args3[]={stage2_i32_type,i32_0,i1_false};
   LLVMValueRef stage2_i32_0_val=LLVMBuildCall(builder,callee,args3,3,"stage2_i32_0_val");
 //  args3[0]=stage2_i1_type;
 //  LLVMValueRef stage2_false_val=LLVMBuildCall(builder,callee,args3,3,"stage2_false_val");
 
   //stage2 function types
   callee=LLVMAddFunction(module,"LLVMFunctionType",ft_i8ptr_i8ptr_i8ptr_i32_i1);
-  LLVMValueRef args5[]={stage2_i32_type,null_val,i32_0_val,false_val};
+  LLVMValueRef args5[]={stage2_i32_type,i8ptr_null,i32_0,i1_false};
   LLVMValueRef stage2_ft_i32=LLVMBuildCall(builder,callee,args5,4,"stage2_ft_i32");
   args5[0]=stage2_void_type;
   LLVMValueRef stage2_ft_void=LLVMBuildCall(builder,callee,args5,4,"stage2_ft_void");
@@ -272,10 +281,18 @@ void addCompilerDemo()
   LLVMValueRef args8[]={stage2_builder,stage2_block};
   LLVMBuildCall(builder,callee,args8,2,"");
 
+
+  //Parse and handle source from libsource.
+  //This will eventually replace all stage 2 calls to LLVM functions
+  LLVMBasicBlockRef handler_end_block=LLVMAppendBasicBlock(func,"handler_end");
+  addSourceHandlerFragment(func,handler_end_block);
+  LLVMPositionBuilderAtEnd(builder,handler_end_block);
+
+
   //stage2: call c_noargs()
   callee=LLVMAddFunction(module,"LLVMBuildCall",ft_i8ptr_i8ptr_i8ptr_i8ptr_i32_i8ptr);  //XXX args should be i8ptrptr, but null pointer literal below isn't typed correctly
   LLVMValueRef stage2_str_=LLVMBuildGlobalStringPtr(builder,"","stage2_str_");
-  LLVMValueRef args10[]={stage2_builder,stage2_c_noargs,stage2_null_val,i32_0_val,stage2_str_};
+  LLVMValueRef args10[]={stage2_builder,stage2_c_noargs,stage2_null_val,i32_0,stage2_str_};
   LLVMBuildCall(builder,callee,args10,5,"");
 
   //stage2: return 0
@@ -288,7 +305,7 @@ void addCompilerDemo()
 
   //LLVMVerifyModule(module,LLVMPrintMessageAction,NULL)
   callee=LLVMAddFunction(module,"LLVMVerifyModule",ft_void_i8ptr_i32_i8ptr);
-  LLVMValueRef pars[]={stage2_module,i32_0_val,null_val};
+  LLVMValueRef pars[]={stage2_module,i32_0,i8ptr_null};
   LLVMBuildCall(builder,callee,pars,3,"");
 
   callee=LLVMAddFunction(module,"LLVMDumpModule",ft_void_i8ptr);
@@ -302,11 +319,9 @@ void addCompilerDemo()
 
 int main(int argc, char **argv)
 {
-  module=LLVMModuleCreateWithName("stage2");
-  context=LLVMGetModuleContext(module);
+  prepareStage1Globals();
 
-  addCompilerDemo();
-  addReadSourceDemo();
+  addCompileFunction();
   addMainFunction();
 
   printf("%s",LLVMPrintModuleToString(module));
